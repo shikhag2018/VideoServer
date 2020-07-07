@@ -1,0 +1,323 @@
+
+<!DOCTYPE html>
+<html>
+    <head>
+        <title>Web Client</title>
+     <meta http-equiv="Content-Type" content="text/html; charset=utf-8">
+    </head>
+    <body>
+    <div id="loginContainer">
+     <input id="login" value="userA">
+     <button onclick="user_login();">Login</button>
+   </div>
+   <div id="callerIDContainer">
+          <input id="callerID" value="userB">
+          <button onclick="call_user();">Call User</button>
+     </div>
+     <div class="video-container">
+           <video autoplay class="remote-video" id="remote-video"></video>
+           <video autoplay muted class="local-video" id="local-video"></video>
+    </div>
+    <div>
+        <button onclick="hangup();">Hangup</button>
+    </div>
+    </body>
+    <script src="/socket.io/socket.io.js"></script>
+    <script>
+     const { RTCPeerConnection, RTCSessionDescription } = window;
+      var socket = io();
+      var constraints = window.constraints = {
+       audio: true,
+       video: true
+       };
+     var busy = false;
+     var incallwith = ""
+     var connectedUser;
+    var pc=null;
+     /*navigator.mediaDevices.getUserMedia(
+        { video: true, audio: true },
+         stream => {
+       
+                },
+          error => {
+        console.log(error.message);
+             }
+       );
+       */
+   
+     navigator.mediaDevices.getUserMedia(constraints)
+      . then(function(stream) {
+          window.stream = stream;
+            const localVideo = document.getElementById("local-video");
+            
+           if (localVideo) {
+                localVideo.srcObject = stream;
+                } 
+          }
+           )
+         .catch(function(error) {
+           if (error.name === 'ConstraintNotSatisfiedError') {
+          console.log('The resolution ' + constraints.video.width.exact + 'x' +
+        constraints.video.height.exact + ' px is not supported by your device.');
+         } else if (error.name === 'PermissionDeniedError') {
+        console.log('Permissions have not been granted to use your camera and ' +
+      'microphone, you need to allow the page access to your devices in ' +
+      'order for the demo to work.');
+             }
+       console.log('getUserMedia error: ' + error.name, error);
+     });
+
+    function CreatePeer(){
+      const configuration = {"iceServers": [
+     {urls: "stun:stun.l.google.com:19302"},
+      { urls: 'stun:stun.services.mozilla.com' },
+     { urls: 'turn:numb.viagenie.ca', credential: 'shankarzkp@gmail.com', username: 'shikha@36' }
+     ]};
+      pc=new RTCPeerConnection(configuration);
+      stream.getTracks().forEach(function(track) {
+           pc.addTrack(track, stream);
+        });
+      pc.ontrack = handleTrackEvent;
+
+    }
+
+    function user_login(){
+            var login = document.getElementById('login').value;
+            username = login;
+          socket.send({
+                     type: "login",
+                     name: username
+                 })
+    }
+
+      
+  async function call_user(){
+        CreatePeer()
+        const offer = await pc.createOffer();
+         await pc.setLocalDescription(new RTCSessionDescription(offer));
+            var callerID = document.getElementById('callerID').value;
+          if (callerID == "") {
+            alert('Please enter caller ID');
+          } else {  
+
+            var callerIDContainer = document.getElementById('callerIDContainer');
+              callerIDContainer.parentElement.removeChild(callerIDContainer);
+                busy = true;
+                incallwith = callerID
+        
+             socket.send({
+                     type:"call_user",
+                     src:offer,
+                     name:callerID,
+                     callername: username
+
+                   })
+               
+                }
+              connectedUser=callerID
+             pc.onicecandidate = function (event) { 
+                if (event.candidate) { 
+                 socket.send({ 
+                 type: "candidate",
+                 target:callerID,
+                 candidate: event.candidate 
+                }); 
+               } 
+             }
+
+          }
+        
+    function handleTrackEvent(event) {
+      console.log(event)
+         const remoteVideo = document.getElementById("remote-video")
+         remoteVideo.srcObject = event.streams[0];
+ 
+          }
+     
+    
+      async function onAnswer(data){
+        CreatePeer()
+        if(busy == false){
+            busy = true
+            incallwith = data.callername
+            var res = confirm(data.callername+" is calling you");
+             if (data.offer) {
+             await pc.setRemoteDescription(new RTCSessionDescription(data.offer))
+             const answer =await  pc.createAnswer();
+             await pc.setLocalDescription(answer);
+             socket.send({
+                 type:"answer",
+                 callername:data.callername,
+                 answer:answer,
+                 from:username
+             });
+             }; 
+
+             pc.onicecandidate = function (event) { 
+                if (event.candidate) { 
+                 socket.send({ 
+                 type: "candidate",
+                 target:data.callername ,
+                 candidate: event.candidate 
+                }); 
+               } 
+             }
+
+            
+            pc.oniceconnectionstatechange = function(event) {
+                 console.log(event)
+                if (pc.connectionState === 'connected') {
+                  // Peers connected!
+                  console.log("peers connected")
+                 }
+             };
+        
+           if(res == true){
+                console.log("call accepted");
+                 connectedUser=data.callername
+
+                 console.log(connectedUser)
+                // code
+ 
+                    }else{
+                   console.log("call rejected");
+ 
+                     busy = false
+                     incallwith = ""
+                 }
+
+             }else{
+                 console.log("call busy");
+                 socket.send({
+                        type: "call_busy",
+                        callername: data.callername,
+                        from: username
+                 })
+ 
+             }
+            }
+
+  
+
+     
+     function onResponse(data){
+                switch(data.response){
+                    case "accepted":
+                    incallwith = data.responsefrom;
+                    console.log("Call accepted by :"+ data.responsefrom);
+                    if (data.answer) {
+                    try{
+                     const remoteDesc = new RTCSessionDescription(data.answer);
+                      pc.setRemoteDescription(remoteDesc);
+                     }catch(e)
+                    {
+                    console.error('Error adding remote description', e);
+                      }
+                    }
+                    
+                    break;
+
+                    case "rejected":
+                    console.log("Call rejected by :"+ data.responsefrom);
+                    busy = false;
+                    incallwith = ""
+                    break;
+                    case "busy":
+                    console.log(data.responsefrom+" call busy");
+                    busy = false;
+                    incallwith = ""
+                    break;
+
+                    default:
+                    console.log(data.responsefrom+" is offline");
+                    busy = false;
+                    incallwith = ""
+                }
+ 
+            }
+
+    socket.on('connect', function(data) {
+          console.log('connect');
+        });
+
+    function onLogin(data) {
+ 
+             if (data.success === false) {
+                    alert("oops...try a different username");
+             } else {
+                 username = data.username;
+                 console.log("Login Successfull");
+                 console.log("logged in as :"+username);
+                 console.log(data.userlist);
+             }
+        }
+
+    function hangup(){
+        socket.send({
+        type:"leave",
+        target:connectedUser,
+        from:username
+      })
+      handleLeave()
+    }
+
+    function handleLeave() {
+        const remoteVideo = document.getElementById("remote-video");
+        remoteVideo.srcObject = null;
+        connectedUser=null
+        busy=false
+         pc.close()
+
+      }
+
+    socket.on('roommessage', function(message){
+            var data = message;
+ 
+            switch(data.type) {
+                 case "login":
+                        console.log("New user : " + data.username);
+                        break;
+                 case "disconnect":
+                   console.log("User disconnected : " + data.username);
+                 break;
+                default:
+                    break;
+            }
+        })
+   
+   socket.on('message', function(message){
+            var data = message;
+            console.log(message)
+            switch(data.type) {
+                case "login":
+                    onLogin(data);
+                    break;
+                case "offer":
+                    console.log("getting called");
+                    onAnswer(data);
+                    break;
+             
+              case "candidate":
+                    if (data.candidate) {
+                    try {
+                     var candidate = new RTCIceCandidate(data.candidate);
+                      pc.addIceCandidate(candidate);
+                    } catch (e) {
+                        console.error('Error adding received ice candidate', e);
+                    }
+                   }
+                   break;
+              case "call_response":
+                      onResponse(data);
+                    break
+
+              case "leave":
+                   handleLeave(data)
+              break;
+              default:
+                    break;
+            }
+    })
+
+  </script>
+  </html>

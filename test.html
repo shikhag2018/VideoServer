@@ -1,0 +1,51 @@
+<!DOCTYPE html>
+<html>
+    <head>
+        <title>Web Client</title>
+     <meta http-equiv="Content-Type" content="text/html; charset=utf-8">
+    </head>
+    <body>
+   <div id="callerIDContainer">
+          <button onclick="call_user();">Call User</button>
+     </div>
+      <div class="video-container">
+      <video autoplay muted class="local-video" id="local-video"></video>    
+    </div>
+    <div>
+        <button onclick="hangup();">Hangup</button>
+    </div>
+    
+ </body>
+    <script >
+      var localStream;
+      var accessRequired=true
+      function call_user()  //your function
+      {    
+         
+     if(accessRequired)
+      {
+          navigator.mediaDevices.getUserMedia({
+           audio: true,
+           video: true
+          }).then(function(stream) {
+           localStream = stream;
+
+           const localVideo = document.getElementById("local-video");
+            
+           if (localVideo) {
+                localVideo.srcObject = localStream;
+                } 
+          });
+
+      }
+
+      }
+
+      function hangup(){
+        localStream.getTracks().forEach(track => track.stop()).then(()=>{accessRequired=false});
+
+      }
+
+    </script>
+</html>
+
