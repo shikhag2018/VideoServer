@@ -141,7 +141,15 @@
             busy = true
             incallwith = data.callername
             var res = confirm(data.callername+" is calling you");
-             if (data.offer) {
+            
+        
+           if(res == true){
+                console.log("call accepted");
+                 connectedUser=data.callername
+
+                 
+                // code
+                if (data.offer) {
              await pc.setRemoteDescription(new RTCSessionDescription(data.offer))
              const answer =await  pc.createAnswer();
              await pc.setLocalDescription(answer);
@@ -171,17 +179,14 @@
                   console.log("peers connected")
                  }
              };
-        
-           if(res == true){
-                console.log("call accepted");
-                 connectedUser=data.callername
-
-                 console.log(connectedUser)
-                // code
  
                     }else{
                    console.log("call rejected");
- 
+                     socket.send({
+                   type:"call_rejected",
+                   callername: data.callername,
+                   from:username
+                 });
                      busy = false
                      incallwith = ""
                  }
